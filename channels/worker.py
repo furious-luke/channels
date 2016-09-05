@@ -153,9 +153,35 @@ class WorkerGroup(Worker):
 
     def __init__(self, *args, **kwargs):
         n_threads = kwargs.pop('n_threads', multiprocessing.cpu_count()) - 1
-        super(WorkerGroup, self).__init__(*args, **kwargs)
+        only_channels = kwargs.pop('only_channels', None)
+        exclude_channels = kwargs.pop('exclude_channels', None)
+        thread_only_channels = kwargs.pop('thread_only_channels', None)
+        thread_exclude_channels = kwargs.pop('thread_exclude_channels', None)
+        super(WorkerGroup, self).__init__(
+            *args,
+            only_channels=self.combine_channels(only_channels, thread_only_channels, 0),
+            exclude_channels=self.combine_channels(exclude_channels, thread_exclude_channels, 0),
+            **kwargs
+        )
         kwargs['signal_handlers'] = False
-        self.workers = [Worker(*args, **kwargs) for ii in range(n_threads)]
+        self.workers = []
+        for ii in range(n_threads):
+            wkr = Worker(
+                *args,
+                only_channels=self.combine_channels(only_channels, thread_only_channels, ii + 1),
+                exclude_channels=self.combine_channels(exclude_channels, thread_exclude_channels, ii + 1),
+                **kwargs
+            )
+            self.workers.append(wkr)
+
+    def combine_channels(self, global_patterns, thread_patterns, tid):
+        global_patterns = global_patterns or []
+        thread_patterns = thread_patterns or []
+        for target, pattern in thread_patterns:
+            if target != tid:
+                continue
+            global_patterns.append(pattern)
+        return global_patterns
 
     def sigterm_handler(self, signo, stack_frame):
         self.termed = True

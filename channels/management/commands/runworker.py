@@ -33,6 +33,14 @@ class Command(BaseCommand):
             default=1, type=int,
             help='Number of threads to execute.'
         )
+        parser.add_argument(
+            '--thread-only-channels', action='append', dest='thread_only_channels',
+            help='Limits a thread to only listening on the provided channels (supports globbing).',
+        )
+        parser.add_argument(
+            '--thread-exclude-channels', action='append', dest='thread_exclude_channels',
+            help='Prevents a thread from listening on the provided channels (supports globbing).',
+        )
 
     def handle(self, *args, **options):
         # Get the backend to use
@@ -67,6 +75,8 @@ class Command(BaseCommand):
             self.logger.info("Using multi-threaded worker, {} thread(s).".format(self.n_threads))
             worker_cls = WorkerGroup
             worker_kwargs['n_threads'] = self.n_threads
+            worker_kwargs['thread_only_channels'] = self.parse_channels('thread_only_channels')
+            worker_kwargs['thread_exclude_channels'] = self.parse_channels('thread_exclude_channels')
         # Run the worker
         self.logger.info("Running worker against channel layer %s", self.channel_layer)
         try:
@@ -82,6 +92,21 @@ class Command(BaseCommand):
             worker.run()
         except KeyboardInterrupt:
             pass
+
+    def parse_channels(self, opt):
+        channels = self.options.get(opt, None)
+        if channels is None:
+            return None
+        result = []
+        for channel in channels:
+            try:
+                target, pattern = channel.split(',')
+                target = int(target.strip())
+            except:
+                raise CommandError('Thread channels are expected to be of the '
+                                   'form "<thread id>,<channel pattern>".')
+            result.append((target, pattern))
+        return result
 
     def consumer_called(self, channel, message):
         self.logger.debug("%s", channel)

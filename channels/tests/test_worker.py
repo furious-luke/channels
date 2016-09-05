@@ -134,3 +134,19 @@ class WorkerGroupTests(ChannelTestCase):
         self.worker.sigterm_handler(None, None)
         for t in threads:
             t.join()
+
+    def test_combine_channels(self):
+        res = self.worker.combine_channels(None, None, 0)
+        self.assertEqual(res, [])
+        res = self.worker.combine_channels([], [], 0)
+        self.assertEqual(res, [])
+        res = self.worker.combine_channels(['a'], [], 0)
+        self.assertEqual(res, ['a'])
+        res = self.worker.combine_channels(['a', 'b'], [(0, 'c')], 0)
+        self.assertEqual(res, ['a', 'b', 'c'])
+        res = self.worker.combine_channels(['a', 'b'], [(1, 'c')], 0)
+        self.assertEqual(res, ['a', 'b'])
+        res = self.worker.combine_channels(['a', 'b'], [(0, 'c')], 1)
+        self.assertEqual(res, ['a', 'b'])
+        res = self.worker.combine_channels(['a', 'b'], [(0, 'c'), (1, 'd'), (0, 'e')], 0)
+        self.assertEqual(res, ['a', 'b', 'c', 'e'])
