@@ -113,7 +113,12 @@ class Worker(object):
             if self.callback:
                 self.callback(channel, message)
             try:
-                logger.debug("Dispatching message on %s to %s", channel, name_that_thing(consumer))
+                logger.debug(
+                    "Dispatching message on %s to %s (reply %s)",
+                    channel,
+                    name_that_thing(consumer),
+                    content.get("reply_channeld", "none")
+                )
                 # Send consumer started to manage lifecycle stuff
                 consumer_started.send(sender=self.__class__, environ={})
                 # Run consumer
@@ -141,6 +146,12 @@ class Worker(object):
             except:
                 logger.exception("Error processing message with consumer %s:", name_that_thing(consumer))
             else:
+                logger.debug(
+                    "Done dispatching message on %s to %s (reply %s)",
+                    channel,
+                    name_that_thing(consumer),
+                    content.get("reply_channeld", "none")
+                )
                 # Send consumer finished so DB conns close etc.
                 consumer_finished.send(sender=self.__class__)
 
