@@ -333,6 +333,7 @@ class ViewConsumer(object):
 
     def __call__(self, message):
         for reply_message in self.handler(message):
+            warn_ii = 0
             while True:
                 # If we get ChannelFull we just wait and keep trying until
                 # it goes through.
@@ -344,6 +345,11 @@ class ViewConsumer(object):
                     # cache all data.
                     message.reply_channel.send(reply_message, immediately=True)
                 except message.channel_layer.ChannelFull:
+                    # Don't want to spam the logs. Dump a warning every five seconds.
+                    if warn_ii % 100 == 0:
+                        logger.warning('Channel layer full: %s' % message.channel_layer.alias)
+                    warn_ii += 1
+                    # Don't hog the CPU.
                     time.sleep(0.05)
                 else:
                     break
