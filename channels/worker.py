@@ -7,6 +7,7 @@ import sys
 import time
 import multiprocessing
 import threading
+import uuid
 
 from .signals import consumer_started, consumer_finished
 from .exceptions import ConsumeLater, DenyConnection
@@ -30,7 +31,8 @@ class Worker(object):
         message_retries=10,
         signal_handlers=True,
         only_channels=None,
-        exclude_channels=None
+        exclude_channels=None,
+        name=None
     ):
         self.channel_layer = channel_layer
         self.callback = callback
@@ -40,6 +42,7 @@ class Worker(object):
         self.exclude_channels = exclude_channels
         self.termed = False
         self.in_job = False
+        self.name = name or str(uuid.uuid4())
 
     def install_signal_handler(self):
         signal.signal(signal.SIGTERM, self.sigterm_handler)
@@ -121,6 +124,9 @@ class Worker(object):
                 )
                 # Send consumer started to manage lifecycle stuff
                 consumer_started.send(sender=self.__class__, environ={})
+                # Dump metrics surrounding consumers so we can get an idea
+                # of how productive each worker is.
+                logger.info('source=%s sample#consumerstart' % self.name)
                 # Run consumer
                 consumer(message, **kwargs)
             except DenyConnection:
@@ -160,6 +166,8 @@ class Worker(object):
             finally:
                 # Send consumer finished so DB conns close etc.
                 consumer_finished.send(sender=self.__class__)
+                # Dump the finish metric.
+                logger.info('source=%s sample#consumerfinish' % self.name)
 
 
 class WorkerGroup(Worker):
