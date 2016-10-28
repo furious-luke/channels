@@ -1,7 +1,6 @@
 import logging
 
 handler = logging.StreamHandler()
-metrics_handler = logging.StreamHandler()
 
 
 def setup_logger(name, verbosity=1):
@@ -28,17 +27,5 @@ def setup_logger(name, verbosity=1):
         daphne_logger.setLevel(
             logging.DEBUG if verbosity > 1 else logging.INFO)
 
-    logger.propagate = False
-    return logger
-
-
-def setup_metrics_logger(name):
-    """Metrics logger
-    """
-    formatter = logging.Formatter('%(message)s')
-    metrics_handler.setFormatter(formatter)
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-    logger.addHandler(metrics_handler)
     logger.propagate = False
     return logger
