@@ -80,7 +80,7 @@ class Worker(object):
         worker_ready.send(sender=self)
 
     def log_idle_time(self, idle_time, force=False):
-        if idle_time >= 10000 or force:
+        if idle_time >= 60000 or force:
             metrics.info('source={} measure#consumer.idle={}ms'.format(
                 self.name, idle_time
             ))
