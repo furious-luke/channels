@@ -16,6 +16,7 @@ from .utils import name_that_thing
 from .signals import worker_ready
 
 logger = logging.getLogger('django.channels')
+metrics = logging.getLogger('metrics')
 
 
 class Worker(object):
@@ -126,7 +127,7 @@ class Worker(object):
                 consumer_started.send(sender=self.__class__, environ={})
                 # Dump metrics surrounding consumers so we can get an idea
                 # of how productive each worker is.
-                logger.info('source=%s sample#consumerstart' % self.name)
+                self._timing_start = time.time()
                 # Run consumer
                 consumer(message, **kwargs)
             except DenyConnection:
@@ -167,7 +168,9 @@ class Worker(object):
                 # Send consumer finished so DB conns close etc.
                 consumer_finished.send(sender=self.__class__)
                 # Dump the finish metric.
-                logger.info('source=%s sample#consumerfinish' % self.name)
+                metrics.info('source={} measure#consumer.time={}ms count#consumer.count=1'.format(
+                    self.name, int((time.time() - self._timing_start) * 1000)
+                ))
 
 
 class WorkerGroup(Worker):
