@@ -9,6 +9,8 @@ import multiprocessing
 import threading
 import uuid
 
+from tidle import TidleThread
+
 from .signals import consumer_started, consumer_finished
 from .exceptions import ConsumeLater, DenyConnection
 from .message import Message
@@ -44,6 +46,9 @@ class Worker(object):
         self.termed = False
         self.in_job = False
         self.name = name or str(uuid.uuid4())
+        self.timer = TidleThread(metrics, 'worker.{}'.format(self.name))
+        self.timer.register('consumer.idle')
+        self.timer.start()
 
     def install_signal_handler(self):
         signal.signal(signal.SIGTERM, self.sigterm_handler)
@@ -79,13 +84,6 @@ class Worker(object):
         """
         worker_ready.send(sender=self)
 
-    def log_idle_time(self, idle_time, force=False):
-        if idle_time >= 60000 or force:
-            metrics.info('source={} measure#consumer.idle={}ms'.format(
-                self.name, idle_time
-            ))
-            self._idle_start = time.time()
-
     def run(self):
         """
         Tries to continually dispatch messages to consumers.
@@ -94,19 +92,14 @@ class Worker(object):
             self.install_signal_handler()
         channels = self.apply_channel_filters(self.channel_layer.router.channels)
         logger.info("Listening on channels %s", ", ".join(sorted(channels)))
-        self._idle_start = time.time()
         while not self.termed:
             self.in_job = False
             channel, content = self.channel_layer.receive_many(channels, block=True)
             self.in_job = True
-            # Precalculate the current idle time.
-            idle_time = int((time.time() - self._idle_start) * 1000)
             # If no message, stall a little to avoid busy-looping then continue
             if channel is None:
                 time.sleep(0.01)
-                self.log_idle_time(idle_time)
                 continue
-            self.log_idle_time(idle_time, force=True)
             # Create message wrapper
             logger.debug("Got message on %s (reply %s)", channel, content.get("reply_channel", "none"))
             message = Message(
@@ -137,11 +130,9 @@ class Worker(object):
                 )
                 # Send consumer started to manage lifecycle stuff
                 consumer_started.send(sender=self.__class__, environ={})
-                # Dump metrics surrounding consumers so we can get an idea
-                # of how productive each worker is.
-                self._working_start = time.time()
                 # Run consumer
-                consumer(message, **kwargs)
+                with self.timer.work('consumer.idle'):
+                    consumer(message, **kwargs)
             except DenyConnection:
                 # They want to deny a WebSocket connection.
                 if message.channel.name != "websocket.connect":
@@ -180,9 +171,7 @@ class Worker(object):
                 # Send consumer finished so DB conns close etc.
                 consumer_finished.send(sender=self.__class__)
                 # Dump the finish metric.
-                metrics.info('source={} measure#consumer.time={}ms count#consumer.count=1'.format(
-                    self.name, int((time.time() - self._working_start) * 1000)
-                ))
+                metrics.info('source={} count#consumer.count=1'.format(self.name))
 
 
 class WorkerGroup(Worker):
