@@ -9,7 +9,7 @@ import multiprocessing
 import threading
 import uuid
 
-from tidle import TidleThread
+from tidle import IdleMetrics, MetricsSingleton, RssMetrics
 
 from .signals import consumer_started, consumer_finished
 from .exceptions import ConsumeLater, DenyConnection
@@ -46,9 +46,15 @@ class Worker(object):
         self.termed = False
         self.in_job = False
         self.name = name or str(uuid.uuid4())
-        self.timer = TidleThread(metrics, 'worker.{}'.format(self.name))
-        self.timer.register('consumer.idle')
-        self.timer.start()
+        self.timer = IdleMetrics(metrics=['consumer.idle'])
+        MetricsSingleton(
+            logger=metrics,
+            source='worker',
+            metrics=[
+                self.timer,
+                RssMetrics()
+            ]
+        )
 
     def install_signal_handler(self):
         signal.signal(signal.SIGTERM, self.sigterm_handler)
