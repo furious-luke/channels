@@ -7,7 +7,6 @@ import sys
 import time
 import multiprocessing
 import threading
-import uuid
 
 from tidle import IdleMetrics, MetricsSingleton, RssMetrics
 
@@ -45,10 +44,11 @@ class Worker(object):
         self.exclude_channels = exclude_channels
         self.termed = False
         self.in_job = False
-        self.name = name or str(uuid.uuid4())
+        self.name = name or os.environ.get('DYNO', 'worker')
         self.timer = IdleMetrics(metrics=['consumer.idle'])
         MetricsSingleton(
             logger=metrics,
+            source=self.name,
             metrics=[
                 self.timer,
                 RssMetrics()
