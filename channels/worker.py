@@ -49,7 +49,6 @@ class Worker(object):
         self.timer = IdleMetrics(metrics=['consumer.idle'])
         MetricsSingleton(
             logger=metrics,
-            source='worker',
             metrics=[
                 self.timer,
                 RssMetrics()
