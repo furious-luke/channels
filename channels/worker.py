@@ -177,7 +177,7 @@ class Worker(object):
                 # Send consumer finished so DB conns close etc.
                 consumer_finished.send(sender=self.__class__)
                 # Dump the finish metric.
-                metrics.info('source={} count#consumer.count=1'.format(self.name))
+                metrics.info('count#consumer.count=1')
 
 
 class WorkerGroup(Worker):
