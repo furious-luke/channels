@@ -5,14 +5,15 @@ import random
 import string
 from functools import wraps
 
-from django.test.testcases import TestCase, TransactionTestCase
-from .. import DEFAULT_CHANNEL_LAYER
-from ..channel import Group
-from ..routing import Router, include
-from ..asgi import channel_layers, ChannelLayerWrapper
-from ..message import Message
-from ..signals import consumer_finished, consumer_started
 from asgiref.inmemory import ChannelLayer as InMemoryChannelLayer
+from django.test.testcases import TestCase, TransactionTestCase
+
+from .. import DEFAULT_CHANNEL_LAYER
+from ..asgi import ChannelLayerWrapper, channel_layers
+from ..channel import Group
+from ..message import Message
+from ..routing import Router, include
+from ..signals import consumer_finished, consumer_started
 
 
 class ChannelTestCaseMixin(object):
@@ -103,6 +104,13 @@ class Client(object):
         if recv_channel is None:
             return
         return Message(content, recv_channel, channel_layers[self.alias])
+
+    def get_consumer_by_channel(self, channel):
+        message = Message({'text': ''}, channel, self.channel_layer)
+        match = self.channel_layer.router.match(message)
+        if match:
+            consumer, kwargs = match
+            return consumer
 
     def send(self, to, content={}):
         """

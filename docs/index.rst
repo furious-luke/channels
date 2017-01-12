@@ -50,8 +50,8 @@ Topics
    routing
    binding
    backends
+   delay
    testing
-   cross-compat
    reference
    faqs
    asgi

@@ -3,19 +3,18 @@ from __future__ import unicode_literals
 import os
 import fnmatch
 import logging
+import multiprocessing
 import signal
 import sys
-import time
-import multiprocessing
 import threading
+import time
 
 from tidle import IdleMetrics, MetricsSingleton, RssMetrics
 
-from .signals import consumer_started, consumer_finished
-from .exceptions import ConsumeLater, DenyConnection
+from .exceptions import ChannelSocketException, ConsumeLater, DenyConnection
 from .message import Message
+from .signals import consumer_finished, consumer_started, worker_ready
 from .utils import name_that_thing
-from .signals import worker_ready
 
 logger = logging.getLogger('django.channels')
 metrics = logging.getLogger('metrics')
@@ -143,7 +142,9 @@ class Worker(object):
                 # They want to deny a WebSocket connection.
                 if message.channel.name != "websocket.connect":
                     raise ValueError("You cannot DenyConnection from a non-websocket.connect handler.")
-                message.reply_channel.send({"accept": False})
+                message.reply_channel.send({"close": True})
+            except ChannelSocketException as e:
+                e.run(message)
             except ConsumeLater:
                 # They want to not handle it yet. Re-inject it with a number-of-tries marker.
                 content['__retries__'] = content.get("__retries__", 0) + 1

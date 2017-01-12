@@ -1,10 +1,11 @@
 from __future__ import unicode_literals
+
 from django.utils import six
 
 from channels import Channel
-from channels.tests import ChannelTestCase
+from channels.exceptions import RequestAborted, RequestTimeout
 from channels.handler import AsgiRequest
-from channels.exceptions import RequestTimeout, RequestAborted
+from channels.tests import ChannelTestCase
 
 
 class RequestTests(ChannelTestCase):
@@ -31,8 +32,8 @@ class RequestTests(ChannelTestCase):
         self.assertNotIn("REMOTE_ADDR", request.META)
         self.assertNotIn("REMOTE_HOST", request.META)
         self.assertNotIn("REMOTE_PORT", request.META)
-        self.assertNotIn("SERVER_NAME", request.META)
-        self.assertNotIn("SERVER_PORT", request.META)
+        self.assertIn("SERVER_NAME", request.META)
+        self.assertIn("SERVER_PORT", request.META)
         self.assertFalse(request.GET)
         self.assertFalse(request.POST)
         self.assertFalse(request.COOKIES)

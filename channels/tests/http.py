@@ -1,10 +1,11 @@
-import json
 import copy
+import json
 
 import six
-
 from django.apps import apps
 from django.conf import settings
+
+from django.http.cookie import SimpleCookie
 
 from ..sessions import session_for_reply_channel
 from .base import Client
@@ -65,9 +66,9 @@ class HttpClient(Client):
         Return text content of a message for client channel and decoding it if json kwarg is set
         """
         content = super(HttpClient, self).receive()
-        if content and json:
+        if content and json and 'text' in content and isinstance(content['text'], six.string_types):
             return json_module.loads(content['text'])
-        return content['text'] if content else None
+        return content.get('text', content) if content else None
 
     def send(self, to, content={}, text=None, path='/'):
         """
@@ -86,12 +87,20 @@ class HttpClient(Client):
                 content['text'] = text
         self.channel_layer.send(to, content)
 
-    def send_and_consume(self, channel, content={}, text=None, path='/', fail_on_none=True):
+    def send_and_consume(self, channel, content={}, text=None, path='/', fail_on_none=True, check_accept=True):
         """
         Reproduce full life cycle of the message
         """
         self.send(channel, content, text, path)
-        return self.consume(channel, fail_on_none=fail_on_none)
+        return self.consume(channel, fail_on_none=fail_on_none, check_accept=check_accept)
+
+    def consume(self, channel, fail_on_none=True, check_accept=True):
+        result = super(HttpClient, self).consume(channel, fail_on_none=fail_on_none)
+        if channel == "websocket.connect" and check_accept:
+            received = self.receive(json=False)
+            if received != {"accept": True}:
+                raise AssertionError("Connection rejected: %s != '{accept: True}'" % received)
+        return result
 
     def login(self, **credentials):
         """
@@ -126,4 +135,10 @@ class HttpClient(Client):
 
 def _encoded_cookies(cookies):
     """Encode dict of cookies to ascii string"""
-    return ('&'.join('{0}={1}'.format(k, v) for k, v in cookies.items())).encode("ascii")
+
+    cookie_encoder = SimpleCookie()
+
+    for k, v in cookies.items():
+        cookie_encoder[k] = v
+
+    return cookie_encoder.output(header='', sep=';').encode("ascii")

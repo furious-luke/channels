@@ -1,3 +1,64 @@
+Full release notes, with more details and upgrade information, are available at:
+https://channels.readthedocs.io/en/latest/releases
+
+
+1.0.2 (2017-01-12)
+------------------
+
+* Websockets can now be closed from anywhere using the new ``WebsocketCloseException``.
+  There is also a generic ``ChannelSocketException`` so you can do custom behaviours.
+
+* Calling ``Channel.send`` or ``Group.send`` from outside a consumer context
+  (i.e. in tests or management commands) will once again send the message immediately.
+
+* The base implementation of databinding now correctly only calls ``group_names(instance)``,
+  as documented.
+
+
+1.0.1 (2017-01-09)
+------------------
+
+* WebSocket generic views now accept connections by default in their connect
+  handler for better backwards compatibility.
+
+
+1.0.0 (2017-01-08)
+------------------
+
+* BREAKING CHANGE: WebSockets must now be explicitly accepted or denied.
+  See https://channels.readthedocs.io/en/latest/releases/1.0.0.html for more.
+
+* BREAKING CHANGE: Demultiplexers have been overhauled to directly dispatch
+  messages rather than using channels to new consumers. Consult the docs on
+  generic consumers for more: https://channels.readthedocs.io/en/latest/generics.html
+
+* BREAKING CHANGE: Databinding now operates from implicit group membership,
+  where your code just has to say what groups would be used and Channels will
+  work out if it's a creation, modification or removal from a client's
+  perspective, including with permissions.
+
+* Delay protocol server ships with Channels providing a specification on how
+  to delay jobs until later and a reference implementation.
+
+* Serializers can now specify fields as `__all__` to auto-include all fields.
+
+* Various other small fixes.
+
+0.17.3 (2016-10-12)
+-------------------
+
+* channel_session now also rehydrates the http session with an option
+
+* request.META['PATH_INFO'] is now present
+
+* runserver shows Daphne log messages
+
+* runserver --nothreading only starts a single worker thread
+
+* Databinding changed to call group_names dynamically and imply changed/created from that;
+  other small changes to databinding, and more changes likely.
+
+
 0.17.2 (2016-08-04)
 -------------------
 

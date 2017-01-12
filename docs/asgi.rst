@@ -53,7 +53,7 @@ servers and applications.
 
 A channel layer provides a protocol server or an application server
 with a ``send`` callable, which takes a channel name and message
-``dict``, and a ``receive_many`` callable, which takes a list of
+``dict``, and a ``receive`` callable, which takes a list of
 channel names and returns the next message available on any named channel.
 
 Thus, rather than under WSGI, where you point the protocol server to the
@@ -64,10 +64,10 @@ via the channel layer.
 
 Despite the name of the proposal, ASGI does not specify or design to any
 specific in-process async solution, such as ``asyncio``, ``twisted``, or
-``gevent``. Instead, the ``receive_many`` function can be switched between
+``gevent``. Instead, the ``receive`` function can be switched between
 nonblocking or synchronous. This approach allows applications to choose what's
 best for their current runtime environment; further improvements may provide
-extensions where cooperative versions of receive_many are provided.
+extensions where cooperative versions of receive are provided.
 
 The distinction between protocol servers and applications in this document
 is mostly to distinguish their roles and to make illustrating concepts easier.
@@ -120,10 +120,10 @@ tied to a client socket).
 the backend wishes; in particular, they do not have to appear globally
 consistent, and backends may shard their contents out to different servers
 so that a querying client only sees some portion of the messages. Calling
-``receive_many`` on these channels does not guarantee that you will get the
+``receive`` on these channels does not guarantee that you will get the
 messages in order or that you will get anything if the channel is non-empty.
 
-*Single-reader channel* names contain an question mark
+*Single-reader channel* names contain a question mark
 (``?``) character in order to indicate to the channel layer that it must make
 these channels appear globally consistent. The ``?`` is always preceded by
 the main channel name (e.g. ``http.response.body``) and followed by a
@@ -206,8 +206,8 @@ The extensions defined here are:
 * ``groups``: Allows grouping of channels to allow broadcast; see below for more.
 * ``flush``: Allows easier testing and development with channel layers.
 * ``statistics``: Allows channel layers to provide global and per-channel statistics.
-* ``twisted``: Async compatability with the Twisted framework.
-* ``asyncio``: Async compatability with Python 3's asyncio.
+* ``twisted``: Async compatibility with the Twisted framework.
+* ``asyncio``: Async compatibility with Python 3's asyncio.
 
 There is potential to add further extensions; these may be defined by
 a separate specification, or a new version of this specification.
@@ -312,7 +312,7 @@ A *channel layer* must provide an object with these attributes
   channel to send on, as a unicode string, and the message
   to send, as a serializable ``dict``.
 
-* ``receive_many(channels, block=False)``, a callable that takes a list of channel
+* ``receive(channels, block=False)``, a callable that takes a list of channel
   names as unicode strings, and returns with either ``(None, None)``
   or ``(channel, message)`` if a message is available. If ``block`` is True, then
   it will not return until after a built-in timeout or a message arrives; if
@@ -328,7 +328,7 @@ A *channel layer* must provide an object with these attributes
   MUST end with ``!`` or ``?`` or this function must error. If the character
   is ``!``, making it a process-specific channel, ``new_channel`` must be
   called on the same channel layer that intends to read the channel with
-  ``receive_many``; any other channel layer instance may not receive
+  ``receive``; any other channel layer instance may not receive
   messages on this channel due to client-routing portions of the appended string.
 
 * ``MessageTooLarge``, the exception raised when a send operation fails
@@ -367,17 +367,20 @@ A channel layer implementing the ``groups`` extension must also provide:
 
 A channel layer implementing the ``statistics`` extension must also provide:
 
-* ``global_statistics()``, a callable that returns a dict with zero
-  or more of (unicode string keys):
+* ``global_statistics()``, a callable that returns statistics across all channels
+* ``channel_statistics(channel)``, a callable that returns statistics for specified channel
 
-  * ``count``, the current number of messages waiting in all channels
+* in both cases statistics are a dict with zero or more of (unicode string keys):
 
-* ``channel_statistics(channel)``, a callable that returns a dict with zero
-  or more of (unicode string keys):
+  * ``messages_count``, the number of messages processed since server start
+  * ``messages_count_per_second``, the number of messages processed in the last second
+  * ``messages_pending``, the current number of messages waiting
+  * ``messages_max_age``, how long the oldest message has been waiting, in seconds
+  * ``channel_full_count``, the number of times `ChannelFull` exception has been risen since server start
+  * ``channel_full_count_per_second``, the number of times `ChannelFull` exception has been risen in the last second
 
-  * ``length``, the current number of messages waiting on the channel
-  * ``age``, how long the oldest message has been waiting, in seconds
-  * ``per_second``, the number of messages processed in the last second
+* Implementation may provide total counts, counts per seconds or both.
+
 
 A channel layer implementing the ``flush`` extension must also provide:
 
@@ -388,15 +391,15 @@ A channel layer implementing the ``flush`` extension must also provide:
 
 A channel layer implementing the ``twisted`` extension must also provide:
 
-* ``receive_many_twisted(channels)``, a function that behaves
-  like ``receive_many`` but that returns a Twisted Deferred that eventually
+* ``receive_twisted(channels)``, a function that behaves
+  like ``receive`` but that returns a Twisted Deferred that eventually
   returns either ``(channel, message)`` or ``(None, None)``. It is not possible
-  to run it in nonblocking mode; use the normal ``receive_many`` for that.
+  to run it in nonblocking mode; use the normal ``receive`` for that.
 
 A channel layer implementing the ``asyncio`` extension must also provide:
 
-* ``receive_many_asyncio(channels)``, a function that behaves
-  like ``receive_many`` but that fulfills the asyncio coroutine contract to
+* ``receive_asyncio(channels)``, a function that behaves
+  like ``receive`` but that fulfills the asyncio coroutine contract to
   block until either a result is available or an internal timeout is reached
   and ``(None, None)`` is returned.
 
@@ -457,7 +460,7 @@ after the most recent ``group_add`` call for that membership, the default being
 ``group_expiry`` property on the channel layer.
 
 Protocol servers must have a configurable timeout value for every connection-based
-prtocol they serve that closes the connection after the timeout, and should
+protocol they serve that closes the connection after the timeout, and should
 default this value to the value of ``group_expiry``, if the channel
 layer provides it. This allows old group memberships to be cleaned up safely,
 knowing that after the group expiry the original connection must have closed,
@@ -561,10 +564,10 @@ Keys:
   Header names must be lowercased.
 
 * ``body``: Body of the request, as a byte string. Optional, defaults to ``""``.
-  If ``more_body`` is set, treat as start of body and concatenate
+  If ``body_channel`` is set, treat as start of body and concatenate
   on further chunks.
 
-* ``more_body``: Name of a single-reader channel (containing ``?``) that contains
+* ``body_channel``: Name of a single-reader channel (containing ``?``) that contains
   Request Body Chunk messages representing a large request body.
   Optional, defaults to ``None``. Chunks append to ``body`` if set. Presence of
   a channel indicates at least one Request Body Chunk message needs to be read,
@@ -735,17 +738,13 @@ server must close the connection with either HTTP status code ``503`` or
 WebSocket close code ``1013``.
 
 This message must be responded to on the ``reply_channel`` with a
-*Connection Reply* message before the socket will pass messages on the
+*Send/Close/Accept* message before the socket will pass messages on the
 ``receive`` channel. The protocol server should ideally send this message
 during the handshake phase of the WebSocket and not complete the handshake
 until it gets a reply, returning HTTP status code ``403`` if the connection is
 denied. If this is not possible, it must buffer WebSocket frames and not
 send them onto ``websocket.receive`` until a reply is received, and if the
 connection is rejected, return WebSocket close code ``4403``.
-
-Receiving a WebSocket *Send/Close* message while waiting for a
-*Connection Reply* must make the server accept the connection and then send
-the message immediately.
 
 Channel: ``websocket.connect``
 
@@ -780,25 +779,6 @@ Keys:
   Optional, defaults to ``None``.
 
 * ``order``: The integer value ``0``.
-
-
-Connection Reply
-''''''''''''''''
-
-Sent back on the reply channel from an application when a ``connect`` message
-is received to say if the connection should be accepted or dropped.
-
-Behaviour on WebSocket rejection is defined in the Connection section above.
-
-If received while the socket is already accepted, the protocol server should
-log an error, but not do anything.
-
-Channel: ``websocket.send!``
-
-Keys:
-
-* ``accept``: If the connection should be accepted (``True``) or rejected and
-  dropped (``False``).
 
 
 Receive
@@ -852,14 +832,28 @@ Keys:
   ``order`` values in ``websocket.receive``.
 
 
-Send/Close
-''''''''''
+Send/Close/Accept
+'''''''''''''''''
 
 Sends a data frame to the client and/or closes the connection from the
-server end. If ``ChannelFull`` is raised, wait and try again.
+server end and/or accepts a connection. If ``ChannelFull`` is raised, wait
+and try again.
 
-If sent while the connection is waiting for acceptance or rejection,
-will accept the connection before the frame is sent.
+If received while the connection is waiting for acceptance after a ``connect``
+message:
+
+* If ``bytes`` or ``text`` is present, accept the connection and send the data.
+* If ``accept`` is ``True``, accept the connection and do nothing else.
+* If ``close`` is ``True`` or a positive integer, reject the connection. If
+  ``bytes`` or ``text`` is also set, it should accept the connection, send the
+  frame, then immediately close the connection.
+
+If received while the connection is established:
+
+* If ``bytes`` or ``text`` is present, send the data.
+* If ``close`` is ``True`` or a positive integer, close the connection after
+  any send.
+* ``accept`` is ignored.
 
 Channel: ``websocket.send!``
 
@@ -869,8 +863,13 @@ Keys:
 
 * ``text``: Unicode string of frame content, if in text mode, or ``None``.
 
-* ``close``: Boolean saying if the connection should be closed after data
-  is sent, if any. Optional, default ``False``.
+* ``close``: Boolean indicating if the connection should be closed after
+  data is sent, if any. Alternatively, a positive integer specifying the
+  response code. The response code will be 1000 if you pass ``True``.
+  Optional, default ``False``.
+
+* ``accept``: Boolean saying if the connection should be accepted without
+  sending a frame if it is in the handshake phase.
 
 A maximum of one of ``bytes`` or ``text`` may be provided. If both are
 provided, the protocol server should ignore the message entirely.
@@ -914,7 +913,7 @@ to prevent busy channels from overpowering quiet channels.
 
 For example, imagine two channels, ``busy``, which spikes to 1000 messages a
 second, and ``quiet``, which gets one message a second. There's a single
-consumer running ``receive_many(['busy', 'quiet'])`` which can handle
+consumer running ``receive(['busy', 'quiet'])`` which can handle
 around 200 messages a second.
 
 In a simplistic for-loop implementation, the channel layer might always check
@@ -1028,9 +1027,9 @@ TODOs
 
 * Maybe remove ``http_version`` and replace with ``supports_server_push``?
 
-* ``receive_many`` can't easily be implemented with async/cooperative code
+* ``receive`` can't easily be implemented with async/cooperative code
   behind it as it's nonblocking - possible alternative call type?
-  Asyncio extension that provides ``receive_many_yield``?
+  Asyncio extension that provides ``receive_yield``?
 
 * Possible extension to allow detection of channel layer flush/restart and
   prompt protocol servers to restart?
@@ -1054,3 +1053,4 @@ Protocol Definitions
 
    /asgi/email
    /asgi/udp
+   /asgi/delay
